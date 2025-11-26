@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>I — Interactive Sentence Generator</title>
+  <style>
+    body {
+      font-family: "Courier New", monospace;
+      background: #111;
+      color: #f0f0f0;
+      padding: 40px;
+      line-height: 1.8;
+    }
+    #output {
+      font-size: 1.3em;
+      white-space: pre-line;
+      margin-bottom: 20px;
+    }
+    .options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    button {
+      background: #333;
+      color: #f0f0f0;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: #555;
+    }
+  </style>
+</head>
+<body>
+  <div id="output">I</div>
+  <div class="options" id="options"></div>
+
+  <script>
+    const rules = {
+      start: ["verb", "adjective", "adverb"],
+      verb: ["noun", "adverb", "conjunction"],
+      adjective: ["noun", "adverb", "end"],
+      adverb: ["verb", "adjective", "end"],
+      noun: ["verb", "end"],
+      conjunction: ["verb", "adjective", "noun"],
+    };
+
+    let structure = "start";
+    let lines = ["I"];
+
+    function currentSentence() { return lines[lines.length - 1]; }
+    function setCurrentSentence(s) { lines[lines.length - 1] = s; render(); }
+    function render() { document.getElementById("output").textContent = lines.join("\n"); }
+
+    async function fetchLLMOptions() {
+      const allowed = (rules[structure] || []).filter((x) => x !== "end");
+
+      const res = await fetch("/next", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sentence: currentSentence(),
+          allowed_pos: allowed,
+          k: 4,
+        }),
+      });
+
+      return await res.json();
+    }
+
+    async function showOptions() {
+      const box = document.getElementById("options");
+      box.innerHTML = "Loading...";
+
+      const data = await fetchLLMOptions();
+      box.innerHTML = "";
+
+      (data.options || []).slice(0, 3).forEach((item) => {
+        const btn = document.createElement("button");
+        btn.textContent = item.word;
+        btn.onclick = () => choose(item.word, item.pos);
+        box.appendChild(btn);
+      });
+
+      const dot = document.createElement("button");
+      dot.textContent = ".";
+      dot.onclick = endSentence;
+      box.appendChild(dot);
+
+      const comma = document.createElement("button");
+      comma.textContent = ",";
+      comma.onclick = () => {
+        setCurrentSentence(currentSentence() + ",");
+        showOptions();
+      };
+      box.appendChild(comma);
+    }
+
+    function choose(word, pos) {
+      setCurrentSentence(currentSentence() + " " + word);
+      structure = pos;
+      showOptions();
+    }
+
+    function endSentence() {
+      setCurrentSentence(currentSentence() + ".");
+      lines.push("I");
+      structure = "start";
+      render();
+      showOptions();
+    }
+
+    render();
+    showOptions();
+  </script>
+</body>
+</html>
